@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Altın & Gümüş Yönetim</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <!-- SheetJS for Excel export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -683,27 +686,109 @@ tbody tr:hover td{background:var(--gold-lt)}
 </div>
 
 <script>
-// ══════════════════════ VERİ KATMANI ══════════════════════
-const LS={get:k=>{try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set:(k,v)=>localStorage.setItem(k,JSON.stringify(v))}
-let KUR    = LS.get('kur_v3')    || {usdtl:38.45,au_tl:3760,au_usd:97.82,ag_tl:39.5,ag_usd:1.024}
-let URUNLER= LS.get('urunler_v3')|| [
-  {id:1,ad:'22 Ayar Bilezik',   metal:'au',ayar:91.6,alimIscUsd:2.5, alimIscTl:0,  satimIscUsd:3.0, satimIscTl:0,  aciklama:''},
-  {id:2,ad:'14 Ayar Yüzük',    metal:'au',ayar:58.5,alimIscUsd:4.0, alimIscTl:0,  satimIscUsd:5.0, satimIscTl:0,  aciklama:''},
-  {id:3,ad:'18 Ayar Kolye',    metal:'au',ayar:75.0, alimIscUsd:3.2, alimIscTl:0,  satimIscUsd:4.0, satimIscTl:0,  aciklama:''},
-  {id:4,ad:'Gümüş Zincir 925', metal:'ag',ayar:92.5, alimIscUsd:0,   alimIscTl:25, satimIscUsd:0,   satimIscTl:35, aciklama:''},
-  {id:5,ad:'Tam Altın (Sikke)',metal:'au',ayar:91.6, alimIscUsd:0,   alimIscTl:0,  satimIscUsd:0,   satimIscTl:0,  aciklama:'Sikke/Cumhuriyet'},
-]
-let CARILER = LS.get('cariler_v3') || [
-  {id:1,ad:'Mehmet Kuyumculuk',tip:'herkisi',tel:'05321234567',adres:'',bakiye:-12500,toplamIslem:285000},
-  {id:2,ad:'Ayşe Hanım',       tip:'musteri',tel:'05449876543',adres:'',bakiye:3200,  toplamIslem:47000},
-  {id:3,ad:'Altın Pınar Ltd.', tip:'satici', tel:'02129876543',adres:'',bakiye:-8900, toplamIslem:320000},
-]
-let ISLEMLER= LS.get('islemler_v3')|| []
-let ODEMELER= LS.get('odemeler_v3')|| []
-let ID_CTR  = LS.get('id_ctr_v3') || {u:6,c:4,i:1,o:1}
+// ══════════════════════ FİREBASE KURULUM ══════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyDRDoFEg7CfI78LIh5hrCQw_SW5Wm_I2SU",
+  authDomain: "altin-gumus.firebaseapp.com",
+  projectId: "altin-gumus",
+  storageBucket: "altin-gumus.firebasestorage.app",
+  messagingSenderId: "633885411247",
+  appId: "1:633885411247:web:bdb711fdfd9b131930915a"
+}
+firebase.initializeApp(firebaseConfig)
+const db = firebase.firestore()
 
-const save=()=>{LS.set('kur_v3',KUR);LS.set('urunler_v3',URUNLER);LS.set('cariler_v3',CARILER);LS.set('islemler_v3',ISLEMLER);LS.set('odemeler_v3',ODEMELER);LS.set('id_ctr_v3',ID_CTR)}
+// ══════════════════════ VERİ KATMANI ══════════════════════
+// localStorage — hızlı okuma için önbellek
+const LS={get:k=>{try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set:(k,v)=>localStorage.setItem(k,JSON.stringify(v))}
+
+let KUR     = LS.get('kur_v3')      || {usdtl:38.45,au_tl:3760,au_usd:97.82,ag_tl:39.5,ag_usd:1.024}
+let URUNLER = LS.get('urunler_v3')  || []
+let CARILER = LS.get('cariler_v3')  || []
+let ISLEMLER= LS.get('islemler_v3') || []
+let ODEMELER= LS.get('odemeler_v3') || []
+let ID_CTR  = LS.get('id_ctr_v3')  || {u:1,c:1,i:1,o:1}
+
+// Firestore'a kaydet (hem cloud hem localCache)
+const save = () => {
+  LS.set('kur_v3',KUR); LS.set('urunler_v3',URUNLER)
+  LS.set('cariler_v3',CARILER); LS.set('islemler_v3',ISLEMLER)
+  LS.set('odemeler_v3',ODEMELER); LS.set('id_ctr_v3',ID_CTR)
+  // Firestore'a yaz — her koleksiyon tek doküman (basit yapı)
+  db.collection('ag_data').doc('kur').set({data: JSON.stringify(KUR)}).catch(()=>{})
+  db.collection('ag_data').doc('urunler').set({data: JSON.stringify(URUNLER)}).catch(()=>{})
+  db.collection('ag_data').doc('cariler').set({data: JSON.stringify(CARILER)}).catch(()=>{})
+  db.collection('ag_data').doc('islemler').set({data: JSON.stringify(ISLEMLER)}).catch(()=>{})
+  db.collection('ag_data').doc('odemeler').set({data: JSON.stringify(ODEMELER)}).catch(()=>{})
+  db.collection('ag_data').doc('id_ctr').set({data: JSON.stringify(ID_CTR)}).catch(()=>{})
+}
+
 const nextId=k=>{const id=ID_CTR[k]++;save();return id}
+
+// Firestore'dan veri yükle
+async function loadFromFirestore() {
+  showSyncStatus('Veriler yükleniyor...')
+  try {
+    const docs = ['kur','urunler','cariler','islemler','odemeler','id_ctr']
+    const results = await Promise.all(docs.map(d => db.collection('ag_data').doc(d).get()))
+    let anyData = false
+    results.forEach((snap, i) => {
+      if (snap.exists && snap.data().data) {
+        anyData = true
+        const parsed = JSON.parse(snap.data().data)
+        if (docs[i]==='kur')      KUR      = parsed
+        if (docs[i]==='urunler')  URUNLER  = parsed
+        if (docs[i]==='cariler')  CARILER  = parsed
+        if (docs[i]==='islemler') ISLEMLER = parsed
+        if (docs[i]==='odemeler') ODEMELER = parsed
+        if (docs[i]==='id_ctr')   ID_CTR   = parsed
+      }
+    })
+    // Önbelleği güncelle
+    LS.set('kur_v3',KUR); LS.set('urunler_v3',URUNLER)
+    LS.set('cariler_v3',CARILER); LS.set('islemler_v3',ISLEMLER)
+    LS.set('odemeler_v3',ODEMELER); LS.set('id_ctr_v3',ID_CTR)
+    hideSyncStatus()
+    // Uygulama ilk yüklemesi: localStorage'dan önce ama Firestore'dan yüklendi
+    if(anyData) {
+      updateKurDisplay(); renderIslemler()
+      if(document.getElementById('page-cariler').classList.contains('active')) renderCariler()
+    } else {
+      // Firestore boş — localStorage'daki örnek veriyi yükle ve Firestore'a kaydet
+      URUNLER = [
+        {id:1,ad:'22 Ayar Bilezik',   metal:'au',ayar:91.6,alimIscUsd:2.5,alimIscTl:0,satimIscUsd:3.0,satimIscTl:0,aciklama:''},
+        {id:2,ad:'14 Ayar Yüzük',    metal:'au',ayar:58.5,alimIscUsd:4.0,alimIscTl:0,satimIscUsd:5.0,satimIscTl:0,aciklama:''},
+        {id:3,ad:'18 Ayar Kolye',    metal:'au',ayar:75.0,alimIscUsd:3.2,alimIscTl:0,satimIscUsd:4.0,satimIscTl:0,aciklama:''},
+        {id:4,ad:'Gümüş Zincir 925', metal:'ag',ayar:92.5,alimIscUsd:0,  alimIscTl:25,satimIscUsd:0, satimIscTl:35,aciklama:''},
+        {id:5,ad:'Tam Altın (Sikke)',metal:'au',ayar:91.6,alimIscUsd:0,  alimIscTl:0, satimIscUsd:0, satimIscTl:0, aciklama:'Sikke/Cumhuriyet'},
+      ]
+      CARILER = []; ISLEMLER = []; ODEMELER = []
+      ID_CTR = {u:6,c:1,i:1,o:1}
+      save()
+    }
+    toast('Veriler buluttan yüklendi ✓')
+  } catch(e) {
+    hideSyncStatus()
+    toast('Bağlantı yok — yerel veriler kullanılıyor', 'err')
+    console.warn('Firestore yüklenemedi:', e)
+  }
+}
+
+function showSyncStatus(msg) {
+  let el = document.getElementById('sync-status')
+  if(!el) {
+    el = document.createElement('div')
+    el.id = 'sync-status'
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#1A3D6B;color:#fff;text-align:center;font-size:12px;padding:6px;z-index:9998;font-family:DM Sans,sans-serif'
+    document.body.appendChild(el)
+  }
+  el.textContent = '☁ ' + msg
+  el.style.display = 'block'
+}
+function hideSyncStatus() {
+  const el = document.getElementById('sync-status')
+  if(el) el.style.display = 'none'
+}
 const fmt=(n,d=2)=>(+n||0).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d})
 const fN=(n,d=2)=>isNaN(n)||n===null?'—':fmt(n,d)
 const today=()=>new Date().toISOString().slice(0,10)
@@ -1503,6 +1588,7 @@ function doLogin(){
     document.getElementById('login-overlay').classList.add('hidden')
     err.textContent=''
     document.getElementById('login-pass').value=''
+    loadFromFirestore()
   } else {
     err.textContent='Hatalı şifre, tekrar deneyin.'
     document.getElementById('login-pass').value=''
@@ -1570,6 +1656,8 @@ function syncAyar(mod){
 updateKurDisplay()
 hesapla()
 document.getElementById('i-tarih').value=today()
+// Firestore'dan verileri yükle (şifre doğrulandıktan sonra da çağrılır)
+loadFromFirestore()
 </script>
 </body>
 </html>
